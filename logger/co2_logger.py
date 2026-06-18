@@ -32,17 +32,42 @@ logging.basicConfig(
 logger = logging.getLogger("co2-logger")
 
 
+def _saturation(t: float) -> float:
+    """Tetens-like saturated vapor pressure (hPa) at temperature t (°C)."""
+    return 6.1078 * 10 ** ((7.5 * t) / (t + 237.3))
+
+
+def _correct(raw_tmp: float, raw_hum: float) -> tuple[float, float]:
+    """Apply the same corrections as the official IO-DATA app.
+
+    Temperature: display = raw - 4.5°C
+    Humidity:    display = raw * saturation(raw_tmp) / saturation(raw_tmp - 4.5)
+    """
+    tmp = raw_tmp - 4.5
+    hum = min(raw_hum * _saturation(raw_tmp) / _saturation(tmp), 99.9)
+    return round(tmp, 1), round(hum, 1)
+
+
 def parse_line(line: str) -> dict | None:
-    """Parse 'CO2=573,HUM=38.0,TMP=30.4' into a dict."""
+    """Parse 'CO2=573,HUM=38.0,TMP=30.4' into a dict with raw and corrected values."""
     try:
         parts = {}
         for token in line.strip().split(","):
             key, _, val = token.partition("=")
             parts[key.strip()] = val.strip()
         co2 = int(parts["CO2"])
-        hum = float(parts["HUM"])
-        tmp = float(parts["TMP"])
-        return {"co2ppm": co2, "humidity": hum, "temperature": tmp}
+        raw_hum = float(parts["HUM"])
+        raw_tmp = float(parts["TMP"])
+        cor_tmp, cor_hum = _correct(raw_tmp, raw_hum)
+        return {
+            "co2ppm": co2,
+            "temperature": cor_tmp,
+            "humidity": cor_hum,
+            "raw": {
+                "temperature": raw_tmp,
+                "humidity": raw_hum,
+            },
+        }
     except (KeyError, ValueError):
         return None
 
@@ -102,7 +127,12 @@ def run_once(ser: serial.Serial) -> None:
 
     ts = datetime.now(tz=timezone.utc)
     write_json(data, ts)
-    logger.info("co2=%d hum=%.1f tmp=%.1f", data["co2ppm"], data["humidity"], data["temperature"])
+    logger.info(
+        "co2=%d tmp=%.1f(raw=%.1f) hum=%.1f(raw=%.1f)",
+        data["co2ppm"],
+        data["temperature"], data["raw"]["temperature"],
+        data["humidity"], data["raw"]["humidity"],
+    )
 
 
 def main() -> None:
