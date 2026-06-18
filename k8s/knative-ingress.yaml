@@ -1,0 +1,32 @@
+apiVersion: networking.internal.knative.dev/v1alpha1
+kind: Ingress
+metadata:
+  name: co2
+  namespace: default
+  annotations:
+    networking.knative.dev/ingress.class: kourier.ingress.networking.knative.dev
+spec:
+  httpOption: Enabled
+  rules:
+    - hosts:
+        - co2.yuiseki.dev
+      http:
+        paths:
+          - splits:
+              - serviceName: co2
+                serviceNamespace: default
+                servicePort: 80
+                percent: 100
+      visibility: ExternalIP
+    - hosts:
+        - co2.default
+        - co2.default.svc
+        - co2.default.svc.cluster.local
+      http:
+        paths:
+          - splits:
+              - serviceName: co2
+                serviceNamespace: default
+                servicePort: 80
+                percent: 100
+      visibility: ClusterLocal

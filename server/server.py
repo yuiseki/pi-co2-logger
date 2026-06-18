@@ -26,6 +26,11 @@ app.add_middleware(
 )
 
 
+@app.get("/")
+def root():
+    return {"ok": True}
+
+
 @app.get("/health")
 def health():
     return {"ok": True}

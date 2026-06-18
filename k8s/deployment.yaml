@@ -16,7 +16,7 @@ spec:
       nodeName: pi4-s-1
       containers:
         - name: co2-server
-          image: co2-server:0.1.0
+          image: co2-server:0.1.1
           imagePullPolicy: IfNotPresent
           ports:
             - containerPort: 8080
