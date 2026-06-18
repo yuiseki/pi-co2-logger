@@ -1,0 +1,45 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: co2
+  namespace: default
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: co2
+  template:
+    metadata:
+      labels:
+        app: co2
+    spec:
+      nodeName: pi4-s-1
+      containers:
+        - name: co2-server
+          image: co2-server:0.1.0
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 8080
+          env:
+            - name: HOST
+              value: "0.0.0.0"
+            - name: PORT
+              value: "8080"
+            - name: CO2_DATA_DIR
+              value: /data/latest
+          volumeMounts:
+            - name: co2-latest
+              mountPath: /data/latest
+              readOnly: true
+          resources:
+            requests:
+              cpu: "50m"
+              memory: "64Mi"
+            limits:
+              cpu: "500m"
+              memory: "256Mi"
+      volumes:
+        - name: co2-latest
+          hostPath:
+            path: /tmp/co2/latest
+            type: DirectoryOrCreate
