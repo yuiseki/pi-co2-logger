@@ -13,7 +13,7 @@ Environment=CO2_BASE_DIR=/tmp/co2
 Environment=CO2_POLL_INTERVAL=5
 Restart=always
 RestartSec=10
-User=pi
+User=yuiseki
 Group=dialout
 
 [Install]
