@@ -11,6 +11,7 @@ sudo pip3 install --break-system-packages pyserial
 echo "[co2-logger] Copying logger to /opt/pi-co2-logger/..."
 sudo mkdir -p /opt/pi-co2-logger/logger
 sudo cp "${REPO_DIR}/logger/co2_logger.py" /opt/pi-co2-logger/logger/co2_logger.py
+sudo cp "${REPO_DIR}/logger/geonicdb_sink.py" /opt/pi-co2-logger/logger/geonicdb_sink.py
 sudo cp "${REPO_DIR}/logger/requirements.txt" /opt/pi-co2-logger/logger/requirements.txt
 
 echo "[co2-logger] Installing systemd unit..."

@@ -11,6 +11,9 @@ ExecStart=/usr/bin/python3 /opt/pi-co2-logger/logger/co2_logger.py
 Environment=CO2_DEVICE=/dev/ttyACM0
 Environment=CO2_BASE_DIR=/tmp/co2
 Environment=CO2_POLL_INTERVAL=5
+# Optional GeonicDB forwarding config (endpoint, API key, tenant, ...).
+# The leading "-" makes the file optional: the logger runs without it.
+EnvironmentFile=-/home/yuiseki/.secrets/geonicdb-co2.env
 Restart=always
 RestartSec=10
 User=yuiseki

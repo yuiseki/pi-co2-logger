@@ -19,6 +19,8 @@ from pathlib import Path
 
 import serial
 
+from geonicdb_sink import GeonicDBSink
+
 DEVICE = os.environ.get("CO2_DEVICE", "/dev/ttyACM0")
 BAUD_RATE = 115200
 BASE_DIR = Path(os.environ.get("CO2_BASE_DIR", "/tmp/co2"))
@@ -102,7 +104,7 @@ def write_json(data: dict, ts: datetime) -> None:
         raise
 
 
-def run_once(ser: serial.Serial) -> None:
+def run_once(ser: serial.Serial, sink: GeonicDBSink | None = None) -> None:
     ser.write(b"STA\r\n")
     time.sleep(0.3)
     # drain the "OK STA" acknowledgement line
@@ -134,16 +136,27 @@ def run_once(ser: serial.Serial) -> None:
         data["humidity"], data["raw"]["humidity"],
     )
 
+    # Best-effort, throttled forward to GeonicDB (no-op unless configured).
+    if sink is not None:
+        sink.maybe_send(data, ts)
+
 
 def main() -> None:
     logger.info("Starting CO2 logger (device=%s, interval=%.0fs)", DEVICE, POLL_INTERVAL)
+    sink = GeonicDBSink.from_env()
+    if sink.enabled:
+        logger.info(
+            "GeonicDB sink enabled (every %.0fs -> %s)", sink.interval, sink.entity_id
+        )
+    else:
+        logger.info("GeonicDB sink disabled (GEONICDB_URL/GEONICDB_API_KEY not set)")
     while True:
         try:
             with serial.Serial(DEVICE, BAUD_RATE, timeout=10) as ser:
                 logger.info("Serial port opened: %s", DEVICE)
                 while True:
                     try:
-                        run_once(ser)
+                        run_once(ser, sink)
                     except serial.SerialException:
                         raise
                     except Exception:
