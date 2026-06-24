@@ -113,5 +113,53 @@ class ThrottleAndSendTest(unittest.TestCase):
         self.assertEqual(captured["headers"]["Content-Type"], "application/json")
 
 
+class HeaderCasingTest(unittest.TestCase):
+    """Guards the regression where urllib capitalized Fiware-ServicePath to
+    Fiware-servicepath, which GeonicDB's case-sensitive policy lookup missed."""
+
+    def test_http_post_preserves_exact_header_case(self):
+        import http.server
+        import threading
+
+        received = {}
+
+        class Handler(http.server.BaseHTTPRequestHandler):
+            def do_POST(self):  # noqa: N802
+                length = int(self.headers.get("Content-Length", 0))
+                self.rfile.read(length)
+                # raw_requestline-derived header keys preserve on-the-wire case
+                received["keys"] = list(self.headers.keys())
+                self.send_response(204)
+                self.end_headers()
+
+            def log_message(self, *_args):
+                pass
+
+        srv = http.server.HTTPServer(("127.0.0.1", 0), Handler)
+        t = threading.Thread(target=srv.handle_request, daemon=True)
+        t.start()
+        port = srv.server_address[1]
+
+        status = geonicdb_sink._http_post(
+            f"http://127.0.0.1:{port}/v2/entities?options=upsert",
+            b'{"id":"x","type":"AirQualityObserved"}',
+            {
+                "Content-Type": "application/json",
+                "X-Api-Key": "gdb_test",
+                "Fiware-Service": "example-tenant",
+                "Fiware-ServicePath": "/devices/co2",
+            },
+            timeout=5,
+        )
+        t.join(timeout=5)
+        srv.server_close()
+
+        self.assertEqual(status, 204)
+        # The exact canonical casing must survive (NOT "Fiware-servicepath").
+        self.assertIn("Fiware-ServicePath", received["keys"])
+        self.assertIn("X-Api-Key", received["keys"])
+        self.assertNotIn("Fiware-servicepath", received["keys"])
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -22,16 +22,18 @@ Environment variables:
 
 from __future__ import annotations
 
+import http.client
 import json
 import logging
 import os
 import time
-import urllib.error
-import urllib.request
+import urllib.parse
 from datetime import datetime
 from typing import Callable
 
 logger = logging.getLogger("co2-logger.geonicdb")
+
+USER_AGENT = "pi-co2-logger"
 
 DEFAULT_SERVICE_PATH = "/devices/co2"
 DEFAULT_ENTITY_ID = "urn:ngsi-ld:AirQualityObserved:co2-sensor-01"
@@ -58,14 +60,31 @@ def build_payload(stat: dict, ts: datetime, *, entity_id: str) -> dict:
 
 
 def _http_post(url: str, data: bytes, headers: dict, timeout: float) -> int:
-    """POST ``data`` and return the HTTP status code. Raises on transport errors."""
-    req = urllib.request.Request(url, data=data, headers=headers, method="POST")
+    """POST ``data`` and return the HTTP status code. Raises on transport errors.
+
+    Uses ``http.client`` rather than ``urllib`` on purpose: urllib's
+    ``Request.add_header`` runs ``key.capitalize()`` on every header name, which
+    turns ``Fiware-ServicePath`` into ``Fiware-servicepath``. GeonicDB's policy
+    engine looks the header up by exact case (``Fiware-ServicePath`` or the
+    all-lowercase ``fiware-servicepath``), so the mangled name is missed and the
+    request is denied. ``putheader`` sends names verbatim.
+    """
+    parts = urllib.parse.urlsplit(url)
+    path = parts.path + (f"?{parts.query}" if parts.query else "")
+    if parts.scheme == "https":
+        conn = http.client.HTTPSConnection(parts.hostname, parts.port or 443, timeout=timeout)
+    else:
+        conn = http.client.HTTPConnection(parts.hostname, parts.port or 80, timeout=timeout)
     try:
-        with urllib.request.urlopen(req, timeout=timeout) as resp:
-            return resp.status
-    except urllib.error.HTTPError as exc:
-        # HTTP-level error (4xx/5xx): surface the status, do not raise
-        return exc.code
+        conn.putrequest("POST", path, skip_host=False, skip_accept_encoding=True)
+        for key, value in headers.items():
+            conn.putheader(key, value)
+        conn.putheader("Content-Length", str(len(data)))
+        conn.endheaders()
+        conn.send(data)
+        return conn.getresponse().status
+    finally:
+        conn.close()
 
 
 class GeonicDBSink:
@@ -122,6 +141,7 @@ class GeonicDBSink:
 
         payload = build_payload(stat, ts, entity_id=self.entity_id)
         headers = {
+            "User-Agent": USER_AGENT,
             "Content-Type": "application/json",
             "X-Api-Key": self.api_key,
             "Fiware-Service": self.tenant,
@@ -132,7 +152,7 @@ class GeonicDBSink:
             status = _http_post(
                 url, json.dumps(payload).encode(), headers, self.timeout
             )
-        except (urllib.error.URLError, OSError) as exc:
+        except (http.client.HTTPException, OSError) as exc:
             logger.warning("GeonicDB upsert failed (network): %s", exc)
             return False
 
